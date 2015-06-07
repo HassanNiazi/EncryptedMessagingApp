@@ -2,9 +2,12 @@ package com.messagingapp;
 
 import android.content.Context;
 import android.content.IntentFilter;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.support.v7.app.ActionBarActivity;
 import android.telephony.SmsManager;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -16,6 +19,15 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
+
+import java.security.InvalidKeyException;
+import java.security.Key;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 
 
@@ -23,6 +35,8 @@ public class MainActivity extends ActionBarActivity {
 
     private static EditText numberField;
     private static EditText messageField;
+    private static EditText secretKeyField;
+    private static EditText lengthField;
     private static ArrayList<Message> list;
     private static MessageArrayAdapter adapter;
 
@@ -33,6 +47,8 @@ public class MainActivity extends ActionBarActivity {
 
         numberField = (EditText) findViewById(R.id.numberField);
         messageField = (EditText) findViewById(R.id.messageField);
+        secretKeyField = (EditText) findViewById(R.id.secretKeyField);
+        lengthField = (EditText) findViewById(R.id.LengthField);
         final ListView listview = (ListView) findViewById(R.id.messageList);
         list = new ArrayList<>();
         adapter = new MessageArrayAdapter(this, list);
@@ -41,6 +57,25 @@ public class MainActivity extends ActionBarActivity {
         ReceivedSMS receivedSMS = new ReceivedSMS(this);
         IntentFilter filter = new IntentFilter("android.provider.Telephony.SMS_RECEIVED");
         registerReceiver(receivedSMS, filter);
+
+        secretKeyField.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+                lengthField.setText(String.valueOf(secretKeyField.getText().toString().length()));
+
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+
+            }
+        });
     }
 
     @Override
@@ -68,6 +103,35 @@ public class MainActivity extends ActionBarActivity {
     public void sendMessage(View view) {
         String number = numberField.getText().toString();
         String message = messageField.getText().toString();
+        byte[] returnArray = new byte[0];
+        try {
+            String SecretKey = secretKeyField.getText().toString();
+            Cipher c = Cipher.getInstance("AES");
+
+            Key key = new SecretKeySpec(SecretKey.getBytes(), "AES");
+
+            try {
+                c.init(Cipher.ENCRYPT_MODE, key);
+            } catch (InvalidKeyException e) {
+                e.printStackTrace();
+            }
+
+            try {
+                returnArray = c.doFinal(message.getBytes());
+            } catch (IllegalBlockSizeException e) {
+                e.printStackTrace();
+            } catch (BadPaddingException e) {
+                e.printStackTrace();
+            }
+
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (NoSuchPaddingException e) {
+            e.printStackTrace();
+        }
+
+       // message = returnArray.toString();
+        message = byte2hex(returnArray);
         SmsManager smsManager = SmsManager.getDefault();
         smsManager.sendTextMessage(
                 number, null, message, null, null);
@@ -75,8 +139,62 @@ public class MainActivity extends ActionBarActivity {
         addToMessages("Me", message);
         messageField.setText("");
     }
+    public static String byte2hex(byte[] b) {
+        String hs = "";
+        String stmp = "";
+        for (int n = 0; n < b.length; n++) {
+            stmp = Integer.toHexString(b[n] & 0xFF);
+            if (stmp.length() == 1)
+                hs += ("0" + stmp);
+            else
+                hs += stmp;
+        }
+        return hs.toUpperCase();
+    }
+    public static byte[] hex2byte(byte[] b) {
+        if ((b.length % 2) != 0)
+            throw new IllegalArgumentException("hello");
+
+        byte[] b2 = new byte[b.length / 2];
+
+        for (int n = 0; n < b.length; n += 2) {
+            String item = new String(b, n, 2);
+            b2[n / 2] = (byte) Integer.parseInt(item, 16);
+        }
+        return b2;
+    }
 
     public void addToMessages(String sender, String message) {
+        byte[] returnArray = new byte[0];
+        byte[] msg = hex2byte(message.getBytes());
+        try {
+
+            String SecretKey = secretKeyField.getText().toString();
+            Cipher c = Cipher.getInstance("AES");
+
+            Key key = new SecretKeySpec(SecretKey.getBytes(), "AES");
+
+            try {
+                c.init(Cipher.DECRYPT_MODE, key);
+            } catch (InvalidKeyException e) {
+                e.printStackTrace();
+            }
+
+            try {
+                returnArray = c.doFinal(msg);
+            } catch (IllegalBlockSizeException e) {
+                e.printStackTrace();
+            } catch (BadPaddingException e) {
+                e.printStackTrace();
+            }
+
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (NoSuchPaddingException e) {
+            e.printStackTrace();
+        }
+
+        message = new String(returnArray);
         list.add(new Message(sender, message));
         adapter.notifyDataSetChanged();
     }
@@ -162,6 +280,10 @@ public class MainActivity extends ActionBarActivity {
             T t = getItem(position);
             lineOneView.setText(lineOneText(t));
             lineTwoView.setText(lineTwoText(t));
+
+            lineOneView.setTextColor(Color.GREEN);
+            lineTwoView.setTextColor(Color.GREEN);
+
 
             return listItemView;
         }
